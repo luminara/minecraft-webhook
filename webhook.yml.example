@@ -1,5 +1,5 @@
 mc-webhook:
-  image-names: deluan/navidrome:latest
+  image-names: itzg/minecraft-bedrock-server
   backup-image-names: kaiede/minecraft-bedrock-backup
   webhooks:
     discord_custom:
@@ -9,6 +9,6 @@ mc-webhook:
         SERVER_STARTED: "The server has started!"
         SERVER_STOPPED: "The server has stopped!"
         PLAYER_CONNECTED: "%playerName% has joined the world"
-        WELCOME_MESSAGE: "Hello new player!"
+        WELCOME_MESSAGE: "say %playerName% Hello new player!"
         PLAYER_DISCONNECTED: "%playerName% has left"
         BACKUP_COMPLETE: "New backup has been created: %filename%"

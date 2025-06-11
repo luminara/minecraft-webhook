@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -146,6 +147,8 @@ func attachToContainer(imageName string) {
 		if err := scanner.Err(); err != nil {
 			log.Printf("Error reading from container output: %v", err)
 		}
+
+		//eventHandler("Stopping server...", hijackedResponse)
 		log.Println("Container output reader stopped.")
 	}()
 
@@ -161,34 +164,52 @@ func attachToContainer(imageName string) {
 }
 
 func eventHandler(event string, hijackedResponse types.HijackedResponse) {
-	events := config.MCWebhook.Webhooks["discord_custom"].Events
-	webhookUrl := config.MCWebhook.Webhooks["discord_custom"].Url
-	var msg string
+	for name, webhook := range config.MCWebhook.Webhooks {
+		if webhook.Url == "" {
+			log.Printf("Skipping webhook '%s': missing URL.", name)
+			continue
+		}
 
-	if strings.Contains(event, "Server started.") {
-		msg = events.ServerStarted
-	} else if strings.Contains(event, "Player Spawned") {
+		webhookMsg, containerMsg := parseLogEvent(event, webhook.Events)
+
+		if webhookMsg != "" {
+			log.Printf("[Webhook:%s] Sending: %s\n", name, webhookMsg)
+			sendWebhook(webhookMsg, webhook.Url)
+		}
+
+		if containerMsg != "" {
+			log.Printf("[Webhook:%s] Sending to container: %s\n", name, containerMsg)
+			_, err := hijackedResponse.Conn.Write([]byte(containerMsg + "\n"))
+			if err != nil {
+				log.Printf("Failed to write to container: %v", err)
+			}
+		}
+	}
+}
+
+func parseLogEvent(event string, events EventMessages) (webhookMsg string, containerMsg string) {
+	if strings.Contains(event, "Server started.") && events.ServerStarted != "" {
+		webhookMsg = events.ServerStarted
+	} else if strings.Contains(event, "Stopping server") && events.ServerStopped != "" {
+		webhookMsg = events.ServerStopped
+	} else if strings.Contains(event, "Player Spawned") && events.PlayerConnected != "" {
 		playerName := regexp.MustCompile(`Player Spawned: ([^\s]+) xuid:`).FindStringSubmatch(event)
+		webhookMsg = strings.Replace(events.PlayerConnected, "%playerName%", playerName[1], -1)
 
 		if events.WelcomeMessage != "" {
 			events.WelcomeMessage = strings.Replace(events.WelcomeMessage, "%playerName%", playerName[1], -1)
-			log.Print(events.WelcomeMessage)
-			hijackedResponse.Conn.Write([]byte(events.WelcomeMessage + "\n"))
+			time.Sleep(6 * time.Second)
+			containerMsg = events.WelcomeMessage
 		}
-
-		msg = strings.Replace(events.PlayerConnected, "%playerName%", playerName[1], -1)
-	} else if strings.Contains(event, "Player disconnected") {
+	} else if strings.Contains(event, "Player disconnected") && events.PlayerDisconnected != "" {
 		playerName := regexp.MustCompile(`Player disconnected: ([^,]+),`).FindStringSubmatch(event)
-		msg = strings.Replace(events.PlayerDisconnected, "%playerName%", playerName[1], -1)
-	} else if strings.Contains(event, "Backed up as:") {
+		webhookMsg = strings.Replace(events.PlayerDisconnected, "%playerName%", playerName[1], -1)
+	} else if strings.Contains(event, "Backed up as:") && events.BackupComplete != "" {
 		filename := regexp.MustCompile(`Backed up as: ([^\s]+\.mcworld)`).FindStringSubmatch(event)
-		msg = strings.Replace(events.BackupComplete, "%filename%", filename[1], -1)
+		webhookMsg = strings.Replace(events.BackupComplete, "%filename%", filename[1], -1)
 	}
 
-	if msg != "" {
-		fmt.Printf("[CONTAINER]: %s\n", event)
-		sendWebhook(msg, webhookUrl)
-	}
+	return webhookMsg, containerMsg
 }
 
 func sendWebhook(msg string, webhookUrl string) {

@@ -62,7 +62,7 @@ var config *Config
 
 func init() {
 	var err error
-	config, err = LoadConfig("webhook.yml")
+	config, err = LoadConfig("config.yml")
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
@@ -135,7 +135,10 @@ func attachToContainer(imageName string) {
 	defer hijackedResponse.Close()
 	log.Printf("Successfully attached to the container '%s'.\n", foundContainerName)
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		scanner := bufio.NewScanner(hijackedResponse.Reader)
 		for scanner.Scan() {
 			eventHandler(scanner.Text(), hijackedResponse)
@@ -150,10 +153,11 @@ func attachToContainer(imageName string) {
 	for inputScanner.Scan() {
 		line := inputScanner.Text()
 		if line == "exit" {
-			log.Println("Exiting application...")
+			log.Println("Exiting log reader for", imageName)
 			break
 		}
 	}
+	wg.Wait()
 }
 
 func eventHandler(event string, hijackedResponse types.HijackedResponse) {

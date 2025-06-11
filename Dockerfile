@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o mc-webhook main.go
 
 FROM alpine:latest
 
-WORKDIR /app
+WORKDIR /
 
 COPY --from=builder /app/mc-webhook .
 

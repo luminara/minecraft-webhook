@@ -193,7 +193,7 @@ func parseLogEvent(event string, events EventMessages) (webhookMsg string, conta
 	} else if strings.Contains(event, "Stopping server") && events.ServerStopped != "" {
 		webhookMsg = events.ServerStopped
 	} else if strings.Contains(event, "Player Spawned") && events.PlayerConnected != "" {
-		playerName := regexp.MustCompile(`Player Spawned: ([^\s]+) xuid:`).FindStringSubmatch(event)
+		playerName := regexp.MustCompile(`Player Spawned: (.+?) xuid:`).FindStringSubmatch(event)
 		webhookMsg = strings.Replace(events.PlayerConnected, "%playerName%", playerName[1], -1)
 
 		if events.WelcomeMessage != "" {
@@ -219,5 +219,4 @@ func sendWebhook(msg string, webhookUrl string) {
 	body, _ := json.Marshal(payload)
 
 	http.Post(webhookUrl, "application/json", bytes.NewBuffer(body))
-	log.Printf("webhook sent msg: %s\n", msg)
 }

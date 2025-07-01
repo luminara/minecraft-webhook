@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -45,6 +46,11 @@ type EventMessages struct {
 	BackupComplete     string `yaml:"BACKUP_COMPLETE"`
 }
 
+type Player struct {
+	Name string `json:"name"`
+	XUID string `json:"xuid"`
+}
+
 func LoadConfig(filename string) (*Config, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -59,7 +65,25 @@ func LoadConfig(filename string) (*Config, error) {
 	return &config, nil
 }
 
+func LoadPlayers(filename string) ([]Player, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []Player{}, nil
+		}
+		return nil, err
+	}
+
+	var players []Player
+	err = json.Unmarshal(data, &players)
+	if err != nil {
+		return nil, err
+	}
+	return players, nil
+}
+
 var config *Config
+var players []Player
 
 func init() {
 	var err error
@@ -68,6 +92,13 @@ func init() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 	fmt.Println("Configuration loaded successfully in init().")
+
+	players, err = LoadPlayers("players.json")
+	if err != nil {
+		log.Fatalf("Failed to load Players Data: %v", err)
+	}
+	fmt.Println("Players Data loaded successfully in init().")
+
 }
 
 func main() {
@@ -193,11 +224,19 @@ func parseLogEvent(event string, events EventMessages) (webhookMsg string, conta
 	} else if strings.Contains(event, "Stopping server") && events.ServerStopped != "" {
 		webhookMsg = events.ServerStopped
 	} else if strings.Contains(event, "Player Spawned") && events.PlayerConnected != "" {
-		playerName := regexp.MustCompile(`Player Spawned: (.+?) xuid:`).FindStringSubmatch(event)
-		webhookMsg = strings.Replace(events.PlayerConnected, "%playerName%", playerName[1], -1)
+		playerName := regexp.MustCompile(`Player Spawned: (.+?) xuid:`).FindStringSubmatch(event)[1]
+		playerXUID := regexp.MustCompile(`xuid: (.+?), pfid:`).FindStringSubmatch(event)[1]
+
+		if findPlayerByXUID(playerXUID) == nil {
+			players = append(players, Player{playerName, playerXUID})
+			SavePlayers("players.json", players)
+			log.Printf("Player data saved: %s", playerName)
+		}
+
+		webhookMsg = strings.Replace(events.PlayerConnected, "%playerName%", playerName, -1)
 
 		if events.WelcomeMessage != "" {
-			events.WelcomeMessage = strings.Replace(events.WelcomeMessage, "%playerName%", playerName[1], -1)
+			events.WelcomeMessage = strings.Replace(events.WelcomeMessage, "%playerName%", playerName, -1)
 			time.Sleep(6 * time.Second)
 			containerMsg = events.WelcomeMessage
 		}
@@ -212,6 +251,10 @@ func parseLogEvent(event string, events EventMessages) (webhookMsg string, conta
 	return webhookMsg, containerMsg
 }
 
+func parseRealmStory() {
+
+}
+
 func sendWebhook(msg string, webhookUrl string) {
 	payload := map[string]string{
 		"content": msg,
@@ -219,4 +262,27 @@ func sendWebhook(msg string, webhookUrl string) {
 	body, _ := json.Marshal(payload)
 
 	http.Post(webhookUrl, "application/json", bytes.NewBuffer(body))
+}
+
+func findPlayerByXUID(xuid string) *Player {
+	for _, p := range players {
+		if p.XUID == xuid {
+			return &p
+		}
+	}
+	return nil
+}
+
+func SavePlayers(filename string, players []Player) error {
+	data, err := json.MarshalIndent(players, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

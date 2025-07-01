@@ -44,6 +44,7 @@ type EventMessages struct {
 	WelcomeMessage     string `yaml:"WELCOME_MESSAGE"`
 	PlayerDisconnected string `yaml:"PLAYER_DISCONNECTED"`
 	BackupComplete     string `yaml:"BACKUP_COMPLETE"`
+	RealmStory         bool   `yaml:"REALM_STORY"`
 }
 
 type Player struct {
@@ -110,11 +111,13 @@ func main() {
 		attachToContainer(config.MCWebhook.ImageNames)
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		attachToContainer(config.MCWebhook.BackupImageNames)
-	}()
+	if config.MCWebhook.BackupImageNames != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			attachToContainer(config.MCWebhook.BackupImageNames)
+		}()
+	}
 
 	select {}
 }
@@ -227,7 +230,7 @@ func parseLogEvent(event string, events EventMessages) (webhookMsg string, conta
 		playerName := regexp.MustCompile(`Player Spawned: (.+?) xuid:`).FindStringSubmatch(event)[1]
 		playerXUID := regexp.MustCompile(`xuid: (.+?), pfid:`).FindStringSubmatch(event)[1]
 
-		if findPlayerByXUID(playerXUID) == nil {
+		if findPlayerByXUID(playerXUID) == "" {
 			players = append(players, Player{playerName, playerXUID})
 			SavePlayers("players.json", players)
 			log.Printf("Player data saved: %s", playerName)
@@ -246,13 +249,75 @@ func parseLogEvent(event string, events EventMessages) (webhookMsg string, conta
 	} else if strings.Contains(event, "Backed up as:") && events.BackupComplete != "" {
 		filename := regexp.MustCompile(`Backed up as: ([^\s]+\.mcworld)`).FindStringSubmatch(event)
 		webhookMsg = strings.Replace(events.BackupComplete, "%filename%", filename[1], -1)
+	} else if strings.Contains(event, "Realms Story") && events.RealmStory == true {
+		webhookMsg, containerMsg = parseRealmStory(event)
 	}
 
 	return webhookMsg, containerMsg
 }
 
-func parseRealmStory() {
+func parseRealmStory(event string) (webhookMsg string, containerMsg string) {
+	re := regexp.MustCompile(`event:\s*(\w+),\s*xuids:\s*\[\s*(\d+)\s*\]`)
+	matches := re.FindStringSubmatch(event)
 
+	var realmStoryEvent string = matches[1]
+	var xuid string = matches[2]
+	var playerName string = findPlayerByXUID(xuid)
+
+	switch realmStoryEvent {
+	case "FirstEnderDragonDefeated":
+		webhookMsg = playerName + " defeated the Ender Dragon!"
+	case "FirstWitherDefeated":
+		webhookMsg = playerName + " defeated the Wither!"
+	case "DefeatEnderdragon":
+		webhookMsg = playerName + " defeated the Ender Dragon!... again"
+	case "DefeatWither":
+		webhookMsg = playerName + " defeated the Wither!... again"
+	case "DiamondEverything":
+		webhookMsg = playerName + " has a full diamond tool and armor set!"
+	case "FirstAbandonedMineshaftFound":
+		webhookMsg = playerName + " discovered an Abandoned Mineshaft!"
+	case "FirstAncientCityFound":
+		webhookMsg = playerName + " discovered an Ancient City!"
+	case "FirstBadlandsFound":
+		webhookMsg = playerName + " discovered a Badlands biome!"
+	case "FirstConduit":
+		webhookMsg = playerName + " now commands the sea"
+	case "FirstNetherite":
+		webhookMsg = playerName + " upgraded to Netherite!"
+	case "FirstDiamondFound":
+		webhookMsg = playerName + " found a diamond"
+	case "FirstEnchantment":
+		webhookMsg = playerName + " discovered enchanting!"
+	case "FirstEndPortal":
+		webhookMsg = playerName + " traveled to The End?"
+	case "FirstMushroomFieldFound":
+		webhookMsg = playerName + " discovered a Mushroom Field!"
+	case "FirstNetherFortressFound":
+		webhookMsg = playerName + " discovered a Nether Fortress!"
+	case "FirstNetherPortalLit":
+		webhookMsg = playerName + " created a portal to the Nether!"
+	case "FirstPeakMountainFound":
+		webhookMsg = playerName + " scaled a Mountain Peak!"
+	case "FirstPillagerOutpostFound":
+		webhookMsg = playerName + " discovered a Pillager Outpost!"
+	case "FirstPoweredBeacon":
+		webhookMsg = playerName + " powered a Beacon!"
+	case "FirstWoodlandMansionFound":
+		webhookMsg = playerName + " discovered a Woodland Mansion!"
+	case "NamedMob":
+		var mobName string = regexp.MustCompile(`"metatext":"([^"]+)"`).FindStringSubmatch(event)[1]
+		webhookMsg = playerName + " has made a new friend, " + mobName
+	case "PillagerCaptainDefeated":
+		webhookMsg = playerName + " defeated a Pillager Captain!"
+	default:
+		webhookMsg = fmt.Sprintf("New Realm Event Discovered: %s\nLog: %s", realmStoryEvent, event)
+	}
+
+	containerMsg = fmt.Sprintf(`tellraw @a {"rawtext":[{"text":"§b[Realm Story] "},{"text":"§a%s"}]}
+		playsound random.orb @a`, webhookMsg)
+
+	return webhookMsg, containerMsg
 }
 
 func sendWebhook(msg string, webhookUrl string) {
@@ -264,13 +329,13 @@ func sendWebhook(msg string, webhookUrl string) {
 	http.Post(webhookUrl, "application/json", bytes.NewBuffer(body))
 }
 
-func findPlayerByXUID(xuid string) *Player {
-	for _, p := range players {
-		if p.XUID == xuid {
-			return &p
+func findPlayerByXUID(xuid string) string {
+	for _, player := range players {
+		if player.XUID == xuid {
+			return player.Name
 		}
 	}
-	return nil
+	return ""
 }
 
 func SavePlayers(filename string, players []Player) error {

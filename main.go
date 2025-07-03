@@ -257,65 +257,76 @@ func parseLogEvent(event string, events EventMessages) (webhookMsg string, conta
 }
 
 func parseRealmStory(event string) (webhookMsg string, containerMsg string) {
-	re := regexp.MustCompile(`event:\s*(\w+),\s*xuids:\s*\[\s*(\d+)\s*\]`)
+	re := regexp.MustCompile(`event:\s*(\w+),\s*xuids:\s*\[\s*([0-9,\s]+)\s*\]`)
 	matches := re.FindStringSubmatch(event)
 
 	var realmStoryEvent string = matches[1]
-	var xuid string = matches[2]
-	var playerName string = findPlayerByXUID(xuid)
+	var xuidsRaw string = matches[2]
+	var xuidList = strings.Split(xuidsRaw, ",")
 
-	switch realmStoryEvent {
-	case "FirstEnderDragonDefeated":
-		webhookMsg = playerName + " defeated the Ender Dragon!"
-	case "FirstWitherDefeated":
-		webhookMsg = playerName + " defeated the Wither!"
-	case "DefeatEnderdragon":
-		webhookMsg = playerName + " defeated the Ender Dragon!... again"
-	case "DefeatWither":
-		webhookMsg = playerName + " defeated the Wither!... again"
-	case "DiamondEverything":
-		webhookMsg = playerName + " has a full diamond tool and armor set!"
-	case "FirstAbandonedMineshaftFound":
-		webhookMsg = playerName + " discovered an Abandoned Mineshaft!"
-	case "FirstAncientCityFound":
-		webhookMsg = playerName + " discovered an Ancient City!"
-	case "FirstBadlandsFound":
-		webhookMsg = playerName + " discovered a Badlands biome!"
-	case "FirstConduit":
-		webhookMsg = playerName + " now commands the sea"
-	case "FirstNetherite":
-		webhookMsg = playerName + " upgraded to Netherite!"
-	case "FirstDiamondFound":
-		webhookMsg = playerName + " found a diamond"
-	case "FirstEnchantment":
-		webhookMsg = playerName + " discovered enchanting!"
-	case "FirstEndPortal":
-		webhookMsg = playerName + " traveled to The End?"
-	case "FirstMushroomFieldFound":
-		webhookMsg = playerName + " discovered a Mushroom Field!"
-	case "FirstNetherFortressFound":
-		webhookMsg = playerName + " discovered a Nether Fortress!"
-	case "FirstNetherPortalLit":
-		webhookMsg = playerName + " created a portal to the Nether!"
-	case "FirstPeakMountainFound":
-		webhookMsg = playerName + " scaled a Mountain Peak!"
-	case "FirstPillagerOutpostFound":
-		webhookMsg = playerName + " discovered a Pillager Outpost!"
-	case "FirstPoweredBeacon":
-		webhookMsg = playerName + " powered a Beacon!"
-	case "FirstWoodlandMansionFound":
-		webhookMsg = playerName + " discovered a Woodland Mansion!"
-	case "NamedMob":
-		var mobName string = regexp.MustCompile(`"metatext":"([^"]+)"`).FindStringSubmatch(event)[1]
-		webhookMsg = playerName + " has made a new friend, " + mobName
-	case "PillagerCaptainDefeated":
-		webhookMsg = playerName + " defeated a Pillager Captain!"
-	default:
-		webhookMsg = fmt.Sprintf("New Realm Event Discovered: %s\nLog: %s", realmStoryEvent, event)
+	for i, xuid := range xuidList {
+		var playerName string = findPlayerByXUID(strings.TrimSpace(xuid))
+		var inGameMsg string
+
+		switch realmStoryEvent {
+		case "FirstEnderDragonDefeated":
+			inGameMsg = playerName + " defeated the Ender Dragon!"
+		case "FirstWitherDefeated":
+			inGameMsg = playerName + " defeated the Wither!"
+		case "DefeatEnderdragon":
+			inGameMsg = playerName + " defeated the Ender Dragon!... again"
+		case "DefeatWither":
+			inGameMsg = playerName + " defeated the Wither!... again"
+		case "DiamondEverything":
+			inGameMsg = playerName + " has a full diamond tool and armor set!"
+		case "FirstAbandonedMineshaftFound":
+			inGameMsg = playerName + " discovered an Abandoned Mineshaft!"
+		case "FirstAncientCityFound":
+			inGameMsg = playerName + " discovered an Ancient City!"
+		case "FirstBadlandsFound":
+			inGameMsg = playerName + " discovered a Badlands biome!"
+		case "FirstConduit":
+			inGameMsg = playerName + " now commands the sea"
+		case "FirstNetherite":
+			inGameMsg = playerName + " upgraded to Netherite!"
+		case "FirstDiamondFound":
+			inGameMsg = playerName + " found a diamond"
+		case "FirstEnchantment":
+			inGameMsg = playerName + " discovered enchanting!"
+		case "FirstEndPortal":
+			inGameMsg = playerName + " traveled to The End?"
+		case "FirstMushroomFieldFound":
+			inGameMsg = playerName + " discovered a Mushroom Field!"
+		case "FirstNetherFortressFound":
+			inGameMsg = playerName + " discovered a Nether Fortress!"
+		case "FirstNetherPortalLit":
+			inGameMsg = playerName + " created a portal to the Nether!"
+		case "FirstPeakMountainFound":
+			inGameMsg = playerName + " scaled a Mountain Peak!"
+		case "FirstPillagerOutpostFound":
+			inGameMsg = playerName + " discovered a Pillager Outpost!"
+		case "FirstPoweredBeacon":
+			inGameMsg = playerName + " powered a Beacon!"
+		case "FirstWoodlandMansionFound":
+			inGameMsg = playerName + " discovered a Woodland Mansion!"
+		case "NamedMob":
+			var mobName string = regexp.MustCompile(`"metatext":"([^"]+)"`).FindStringSubmatch(event)[1]
+			inGameMsg = playerName + " has made a new friend, " + mobName
+		case "PillagerCaptainDefeated":
+			inGameMsg = playerName + " defeated a Pillager Captain!"
+		default:
+			inGameMsg = fmt.Sprintf("New Realm Event Discovered: %s\nLog: %s", realmStoryEvent, event)
+		}
+
+		tellrawCmd := fmt.Sprintf(`tellraw @a {"rawtext":[{"text":"§b[Realm Story] "},{"text":"§a%s"}]}`, inGameMsg)
+		soundCmd := "playsound random.orb @a"
+		containerMsg += tellrawCmd + "\n" + soundCmd
+		webhookMsg += inGameMsg
+		if i < (len(xuidList) - 1) {
+			containerMsg += "\n"
+			webhookMsg += "\n"
+		}
 	}
-
-	containerMsg = fmt.Sprintf(`tellraw @a {"rawtext":[{"text":"§b[Realm Story] "},{"text":"§a%s"}]}
-		playsound random.orb @a`, webhookMsg)
 
 	return webhookMsg, containerMsg
 }

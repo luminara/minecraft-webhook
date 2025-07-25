@@ -249,7 +249,7 @@ func parseLogEvent(event string, events EventMessages) (webhookMsg string, conta
 	} else if strings.Contains(event, "Backed up as:") && events.BackupComplete != "" {
 		filename := regexp.MustCompile(`Backed up as: ([^\s]+\.mcworld)`).FindStringSubmatch(event)
 		webhookMsg = strings.Replace(events.BackupComplete, "%filename%", filename[1], -1)
-	} else if strings.Contains(event, "Realms Story") && events.RealmStory == true {
+	} else if strings.Contains(event, "Realms Story") && !strings.Contains(event, "tellraw") && events.RealmStory == true {
 		webhookMsg, containerMsg = parseRealmStory(event)
 	}
 
@@ -287,7 +287,7 @@ func parseRealmStory(event string) (webhookMsg string, containerMsg string) {
 			inGameMsg = playerName + " discovered a Badlands biome!"
 		case "FirstConduit":
 			inGameMsg = playerName + " now commands the sea"
-		case "FirstNetherite":
+		case "FirstCraftedNetherite":
 			inGameMsg = playerName + " upgraded to Netherite!"
 		case "FirstDiamondFound":
 			inGameMsg = playerName + " found a diamond"

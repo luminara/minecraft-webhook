@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -7,9 +7,10 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o mc-webhook main.go
+RUN --platform=$BUILDPLATFORM \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -o mc-webhook main.go
 
-FROM alpine:latest
+FROM --platform=$TARGETPLATFORM alpine:latest
 
 WORKDIR /
 

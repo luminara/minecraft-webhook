@@ -247,7 +247,7 @@ func parseLogEvent(event string, events EventMessages) (webhookMsg string, conta
 		playerName := regexp.MustCompile(`Player disconnected: ([^,]+),`).FindStringSubmatch(event)
 		webhookMsg = strings.Replace(events.PlayerDisconnected, "%playerName%", playerName[1], -1)
 	} else if strings.Contains(event, "Backed up as:") && events.BackupComplete != "" {
-		filename := regexp.MustCompile(`Backed up as: ([^\s]+\.mcworld)`).FindStringSubmatch(event)
+		filename := regexp.MustCompile(`Backed up as: (.*?\.mcworld)`).FindStringSubmatch(event)
 		webhookMsg = strings.Replace(events.BackupComplete, "%filename%", filename[1], -1)
 	} else if strings.Contains(event, "Realms Story") && !strings.Contains(event, "tellraw") && events.RealmStory == true {
 		webhookMsg, containerMsg = parseRealmStory(event)
